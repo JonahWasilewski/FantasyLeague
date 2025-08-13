@@ -2,8 +2,8 @@ import { ethers } from 'ethers';
 import { fantasyLeagueABI } from '../abi/FantasyLeagueABI.js';
 
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
-console.log("Contract address from env:", CONTRACT_ADDRESS); // for debugging
 
+// Load the contract from the ABI
 export function getFantasyLeagueContract(signerOrProvider: ethers.Signer | ethers.Provider) {
   if (!CONTRACT_ADDRESS) {
     throw new Error("VITE_CONTRACT_ADDRESS is not set in your .env file");
