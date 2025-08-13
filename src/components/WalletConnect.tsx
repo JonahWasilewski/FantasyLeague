@@ -6,11 +6,13 @@ interface Props {
 
 export default function ConnectWallet({ onConnect }: Props) {
   const connectWallet = async () => {
+    // Make sure the user has MetaMask installed on their browser
     if (typeof window.ethereum === 'undefined') {
       alert("MetaMask is not installed. Please install it from https://metamask.io/download.html")
       return
     }
 
+    // Connect wallet via MetaMask extension and take user to team selection page if successful
     try {
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
       if (accounts.length > 0) {
@@ -22,6 +24,7 @@ export default function ConnectWallet({ onConnect }: Props) {
     }
   }
 
+  // UI is a button to connect wallet
   return (
     <div>
       <button onClick={connectWallet}>Connect Wallet</button>
