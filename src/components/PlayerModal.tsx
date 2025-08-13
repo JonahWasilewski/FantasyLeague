@@ -1,13 +1,16 @@
 import React from 'react'
 
+// Alias for the season currently in view
 type StatView = 'current' | 'previous'
 
+// Player object structure
 interface Player {
   id: number | bigint
   name: string
   parsedStats: { [key: string]: string | number }
 }
 
+// Structure expected by the player modal component (for formatting)
 interface PlayerModalProps {
   player: Player
   statView: StatView
