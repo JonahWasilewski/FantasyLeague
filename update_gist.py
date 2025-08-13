@@ -9,6 +9,7 @@ def update_gist(file_path):
     with open(file_path, "r") as f:
         content = f.read()
 
+    # Prepare data for the request
     url = f"https://api.github.com/gists/{GIST_ID}"
     headers = {
         "Authorization": f"Bearer {GIST_TOKEN}",
@@ -22,6 +23,7 @@ def update_gist(file_path):
         }
     }
 
+    # Make the request and store the response (status code)
     response = requests.patch(url, headers=headers, json=data)
     if response.status_code == 200:
         print("Gist updated successfully.")
