@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { BrowserProvider, ethers } from 'ethers'
 import { getFantasyLeagueContract } from '../utils/contract'
 
+// Structure of data to put in the leaderboard (from various functions)
 interface TeamData {
   address: string
   playerIds: number[]
@@ -33,16 +34,19 @@ const Leaderboard: React.FC = () => {
         setEthToGbp(data.ethereum.gbp)
 
         const participants: string[] = await contract.getParticipants()
-        const leaderboard: TeamData[] = []
+        const leaderboard: TeamData[] = []    // Initially empty list of TeamData's
 
+        // Get team data for each participant
         for (const addr of participants) {
           const [playerIds, submitted, fetchedUserName, fetchedTeamName] = await contract.getUserTeam(addr)
           if (!submitted) continue
 
+          // Get player IDs from the mapping 
           const numericIds = playerIds.map((id) => Number(id))
 
         let totalPoints = 0
 
+        // Parse the stats of each player to convert to JSON format (originally stored as a string in the contract)
         for (const id of numericIds) {
           const stats = await contract.players(id)
 
@@ -81,8 +85,10 @@ const Leaderboard: React.FC = () => {
     fetchLeaderboard()
   }, [])
 
+  // Let the user know that leaderboard data is being fetched/compiled
   if (loading) return <p>Loading leaderboard...</p>
 
+  // Round price to pence
   const prizeInGbp =
     prizePool && ethToGbp ? (parseFloat(prizePool) * ethToGbp).toFixed(2) : null
 
