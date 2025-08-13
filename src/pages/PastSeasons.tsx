@@ -3,12 +3,14 @@ import { BrowserProvider, ethers } from 'ethers';
 import { getFantasyLeagueContract } from '../utils/contract';
 import './styles/pastSeasons.css';
 
+// ID and Name info of players in a team
 type Team = {
   playerIds: number[];
   playerNames: string[];
   submitted: boolean;
 };
 
+// Model for each participant in a given season
 type ParticipantData = {
   address: string;
   team: Team;
@@ -16,6 +18,7 @@ type ParticipantData = {
   teamName: string;
 };
 
+// All info to be displayed for each season
 type SeasonData = {
   seasonNumber: number;
   participants: ParticipantData[];
@@ -32,15 +35,17 @@ const PastSeasons: React.FC = () => {
       try {
         const provider = new BrowserProvider(window.ethereum);
         const contract = getFantasyLeagueContract(provider);
+
         const currentSeason = await contract.currentSeason();
-        const pastSeasons: SeasonData[] = [];
+        const pastSeasons: SeasonData[] = [];               // Initialise empty lists
         const playerNameCache: { [id: number]: string } = {};
 
+        // Use ID to get a player name from the mapping
         const getPlayerName = async (id: number, contract: any): Promise<string> => {
         if (playerNameCache[id]) return playerNameCache[id];
 
         try {
-            const player = await contract.players(id); // ⬅️ Direct access to public mapping
+            const player = await contract.players(id); // Direct access to public mapping
             const name = player.name;
             playerNameCache[id] = name;
             return name || `Player #${id}`;
@@ -50,10 +55,12 @@ const PastSeasons: React.FC = () => {
         }
         };
 
+        // Loop through each season stored in the contract to populate data structures
         for (let season = 1; season < currentSeason; season++) {
             const participants: string[] = await contract.getPastParticipants(season);
             const participantData: ParticipantData[] = [];
 
+            // Loop through each player in the current season
             for (const user of participants) {
                 const [playerIdsRaw, submitted]: [ethers.BigNumberish[], boolean] = await contract.getPastTeam(season, user);
                 const playerIds = playerIdsRaw.map((id) => Number(id));
@@ -62,7 +69,8 @@ const PastSeasons: React.FC = () => {
                 const playerName: string = await contract.getPastPlayerNames(season, user);
                 const teamName: string = await contract.getPastTeamName(season, user);
 
-                participantData.push({
+                // Add all info on the participant to the structure
+                    participantData.push({
                     address: user,
                     team: {
                     playerIds,
@@ -74,9 +82,11 @@ const PastSeasons: React.FC = () => {
                 });
             }
 
+        // Get the winner and prize money allocated in this season
         const winner = await contract.getPastWinner(season);
         const prizePool = await contract.getPastPrizePool(season);
 
+        // Add all data for this season
         pastSeasons.push({
             seasonNumber: season,
             participants: participantData,
