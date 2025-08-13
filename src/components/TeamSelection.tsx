@@ -5,6 +5,7 @@ import { getFantasyLeagueContract } from '../utils/contract'
 import { ethers } from 'ethers'
 import PlayerModal from "../components/PlayerModal";
 
+// Player data structure - Returned by the contract
 interface PlayerFromContract {
   id: bigint
   name: string
@@ -12,11 +13,13 @@ interface PlayerFromContract {
   rawStats: string
 }
 
+// Handle raw stats and calculated fields for UI
 interface Player extends PlayerFromContract {
   parsedStats: { [key: string]: string | number }
   selectionPercentage: number
 }
 
+// Triggered when a team is submitted
 interface Props {
   onTeamSubmit: () => void
 }
@@ -24,6 +27,7 @@ interface Props {
 const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
   const navigate = useNavigate()
 
+  // State management
   const [currentPage, setCurrentPage] = useState(1)
   const [sortKey, setSortKey] = useState<keyof Player | 'PRICE'>('current_TOTAL_POINTS')
   const [sortAsc, setSortAsc] = useState(false)
@@ -32,7 +36,6 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
   const [players, setPlayers] = useState<Player[]>([])
 
   const playersPerPage = 10
-  const maxPoints = Math.max(...players.map(player => Number(player.parsedStats['TOTAL_POINTS'] || 0)))
 
   const sortedPlayers = [...players].sort((a, b) => {
     const valA = sortKey === 'PRICE' ? Number(a.price) : Number(a.parsedStats[sortKey] || 0)
@@ -56,6 +59,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
     }
   }
 
+  // States for the selected team
   const [mainPlayers, setMainPlayers] = useState<Player[]>([])
   const [reservePlayer, setReservePlayer] = useState<Player | null>(null)
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
@@ -66,6 +70,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
   const maxTeamSize = 11
   const teamBudget = 100_000_000
 
+  // Fetch players and wallet from contract
   useEffect(() => {
     async function fetchWallet() {
       if ((window as any).ethereum) {
@@ -73,6 +78,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
         const address = accounts[0]
         setWalletAddress(address)
 
+        // Reset team when new account is used
         setMainPlayers([])
         setReservePlayer(null)
         localStorage.removeItem(`team-${address}`)
@@ -93,8 +99,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
 
             // Fetch percentage (scaled by 1e18 in contract)
             const percentageScaled = await contract.getPlayerSelectionPercentage(id);
-            const percentage = Number(percentageScaled) / 1e16; 
-            // divide by 1e16 → from 1e18 scaling to regular % with two decimal places
+            const percentage = Number(percentageScaled) / 1e16;         // Scale
 
             return {
               id: player.id,
@@ -122,8 +127,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
     0n
   ))
 
-  const teamPriceInMillions = Number(teamPrice) / 1e24
-
+  // Add/Remove highlighted players
   const togglePlayer = (player: Player) => {
     const isMain = mainPlayers.some(p => p.id === player.id)
     const isReserve = reservePlayer?.id === player.id
@@ -146,6 +150,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
     }
   }
 
+  // Row background for selected players
   const getRowStyle = (player: Player): React.CSSProperties => {
     if (mainPlayers.some(p => p.id === player.id)) return { backgroundColor: '#d0f0c0' }
     if (reservePlayer?.id === player.id) return { backgroundColor: '#cce5ff' }
@@ -170,6 +175,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
       const alreadyJoined = await contract.hasJoined(userAddress)
       const entryFee = await contract.entryFee()
 
+      // Check for address already in the league, and pay entry fee if not
       if (!alreadyJoined) {
         const confirmJoin = window.confirm(
           `You haven't paid the entry fee yet. Entry fee is ${ethers.formatEther(entryFee)} ETH. Proceed?`
@@ -179,6 +185,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
         await joinTx.wait()
       }
 
+      // Submit team and user info to contract
       const tx = await contract.submitTeam(
         selectedIds.map(id => BigInt(id)),
         userName,
@@ -186,6 +193,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
       )
       await tx.wait()
 
+      // Team stored in local storage to improve retrieval time (and lower query costs) when loading team on next page
       localStorage.setItem(
         `team-${userAddress}`,
         JSON.stringify({
@@ -204,6 +212,8 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
     }
   }
 
+
+  // Render the UI
   return (
     <div style={{ padding: '2rem', width: '100%', maxWidth: '1200px', margin: '0 auto' }}>
       {loading && (
@@ -351,24 +361,4 @@ const tdStyle: React.CSSProperties = {
   padding: '0.5rem',
   borderBottom: '1px solid #ddd',
   textAlign: 'center'
-}
-
-const modalBackdrop: React.CSSProperties = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  height: '100vh',
-  width: '100vw',
-  backgroundColor: 'rgba(0,0,0,0.4)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center'
-}
-
-const modalStyle: React.CSSProperties = {
-  backgroundColor: '#fff',
-  padding: '2rem',
-  borderRadius: '8px',
-  maxHeight: '80vh',
-  overflowY: 'auto'
 }
