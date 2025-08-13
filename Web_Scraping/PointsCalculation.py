@@ -3,6 +3,8 @@ from PlayCricketScraping import scrape_playcricket_stats
 import json
 from PriceCalculation import calculatePrice
 
+############# Calculate points for each section using dataframes retrieved from scrape_playcricket_stats #############
+
 def calculate_batting_stats():
     print("Scraping current season...")
     current = scrape_playcricket_stats(tab="batting", season_offset=0).fillna(0)
@@ -99,6 +101,7 @@ def compile_player_stats():
         prev_bat_df, prev_bowl_df, prev_field_df
     )
 
+    # Make points collumns numeric for later processing
     merged_df["current_BATTING_POINTS"] = pd.to_numeric(merged_df.get("current_BATTING_POINTS", 0), errors='coerce').fillna(0)
     merged_df["previous_BATTING_POINTS"] = pd.to_numeric(merged_df.get("previous_BATTING_POINTS", 0), errors='coerce').fillna(0)
 
