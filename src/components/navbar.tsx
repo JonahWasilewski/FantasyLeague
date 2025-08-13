@@ -16,6 +16,7 @@ const Navbar: React.FC = () => {
     fontWeight: 'bold'
   })
 
+  // Render UI with links to different pages
   return (
     <nav style={{
       display: 'flex',
