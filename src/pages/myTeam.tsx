@@ -4,12 +4,12 @@ import { getFantasyLeagueContract } from "../utils/contract";
 import "./styles/myTeam.css";
 import PlayerModal from "../components/PlayerModal";
 
+// Structure of a player returned by the contract
 type Player = {
   id: number;
   name: string; 
   parsedStats: { [key: string]: string | number };
 };
-
 
 const MyTeam: React.FC = () => {
   const [teamPlayers, setTeamPlayers] = useState<Player[]>([]);
@@ -22,6 +22,7 @@ const MyTeam: React.FC = () => {
 
   useEffect(() => {
     async function loadTeam() {
+      // Can only view a team if signed in
       if (!window.ethereum) return alert("Ethereum wallet not detected.");
 
       const provider = new BrowserProvider(window.ethereum);
@@ -30,17 +31,21 @@ const MyTeam: React.FC = () => {
       setWalletAddress(address);
 
       const contract = getFantasyLeagueContract(signer);
+      // Get the team associated with the user signed in
       const [fetchedPlayerIds, submitted, fetchedUserName, fetchedTeamName] =
         await contract.getUserTeam(address);
 
+      // Need to submit a team before viewing this section
       if (!submitted || fetchedPlayerIds.length === 0) {
         alert("You haven't submitted a team yet. Redirecting to selection.");
         window.location.href = "/select";
         return;
       }
 
+      // Mapping to get IDs/names
       const playerIds = fetchedPlayerIds.map((id: ethers.BigNumberish) => Number(id));
 
+      // Get names using IDs, then parse stats for each player
       const statsPromises = playerIds.map(async (id) => {
         const playerData = await contract.players(id);
         let parsedStats = {};
@@ -60,6 +65,7 @@ const MyTeam: React.FC = () => {
           console.warn(`Invalid or missing rawStats for player ${playerData.id}`);
         }
 
+        // Return the formatted player data
         return {
           id: Number(playerData.id),
           name: playerData.name,
