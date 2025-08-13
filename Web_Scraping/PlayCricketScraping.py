@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from io import StringIO
 
-# Load environment variables only once
+# Load environment variables
 load_dotenv()
 EMAIL = os.getenv("PLAYCRICKET_EMAIL")
 PASSWORD = os.getenv("PLAYCRICKET_PASSWORD")
@@ -15,13 +15,16 @@ PASSWORD = os.getenv("PLAYCRICKET_PASSWORD")
 LOGIN_URL = "https://myaccount.play-cricket.com/idp-signin"
 STARTING_URL = "https://toft.play-cricket.com/Statistics"
 
+# Different extensions from the starting URL for stats pages 
 TAB_URLS = {
     "batting": "",
     "bowling": "/Statistics?season=258&sub_tab=Standard&tab=Bowling",
     "fielding": "/Statistics?season=258&sub_tab=Standard&tab=Fielding"
 }
 
+# Need to change the minumum number of innings to 0 so that all players are included in the table
 def set_minimum_filter(page):
+    # Navigate page
     try:
         input_field = page.locator(f"input[name='atleast']")
         input_field.wait_for(state="visible", timeout=5000)
@@ -29,6 +32,7 @@ def set_minimum_filter(page):
     except Exception as e:
         print(f"[!] Failed to set filter 'atleast': {e}")
 
+# Scrape stats depending on the specified tab
 def scrape_playcricket_stats(tab: str = "batting", season_offset: int = 0) -> pd.DataFrame:
     assert tab in TAB_URLS, f"Invalid tab: {tab}. Must be one of {list(TAB_URLS.keys())}"
 
@@ -78,7 +82,6 @@ def scrape_playcricket_stats(tab: str = "batting", season_offset: int = 0) -> pd
         page.wait_for_selector("table#stats-table-rows", timeout=5000)
         time.sleep(1)
 
-        current_year_str = str(datetime.now().year)
         previous_year_str = str(datetime.now().year - 1)
 
         # Change to correct season
