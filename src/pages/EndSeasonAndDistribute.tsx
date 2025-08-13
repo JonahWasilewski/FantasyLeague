@@ -11,6 +11,7 @@ const EndSeasonAndDistribute: React.FC = () => {
       setLoading(true)
       setStatus(null)
 
+      // Ensure a user is logged in
       if (!window.ethereum) {
         setStatus('Wallet not found')
         return
@@ -20,6 +21,7 @@ const EndSeasonAndDistribute: React.FC = () => {
       const signer = await provider.getSigner()
       const contract = getFantasyLeagueContract(signer)
 
+      // Use function from the contract (processed completely on-chain)
       const tx = await contract.endSeasonAndDistribute()
       await tx.wait()
 
