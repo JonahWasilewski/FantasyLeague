@@ -4,11 +4,17 @@ import { getFantasyLeagueContract } from "../utils/contract";
 import "./styles/myTeam.css";
 import PlayerModal from "../components/PlayerModal";
 
-// Structure of a player returned by the contract
 type Player = {
   id: number;
-  name: string; 
+  name: string;
   parsedStats: { [key: string]: string | number };
+  isCaptain?: boolean;
+  displayPoints?: {
+    total: number;
+    batting: number;
+    bowling: number;
+    fielding: number;
+  };
 };
 
 const MyTeam: React.FC = () => {
@@ -16,13 +22,13 @@ const MyTeam: React.FC = () => {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>("");
   const [teamName, setTeamName] = useState<string>("");
+  const [totalPoints, setTotalPoints] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-  const [statView, setStatView] = useState<'current' | 'previous'>('current')
+  const [statView, setStatView] = useState<'current' | 'previous'>('current');
 
   useEffect(() => {
     async function loadTeam() {
-      // Can only view a team if signed in
       if (!window.ethereum) return alert("Ethereum wallet not detected.");
 
       const provider = new BrowserProvider(window.ethereum);
@@ -31,52 +37,81 @@ const MyTeam: React.FC = () => {
       setWalletAddress(address);
 
       const contract = getFantasyLeagueContract(signer);
-      // Get the team associated with the user signed in
-      const [fetchedPlayerIds, submitted, fetchedUserName, fetchedTeamName] =
-        await contract.getUserTeam(address);
+      // getUserTeam returns: (playerIds, submitted, playerName, teamName, userRank, captain)
+      const [
+        fetchedPlayerIds,
+        submitted,
+        fetchedUserName,
+        fetchedTeamName,
+        _userRank,
+        fetchedCaptainId
+      ] = await contract.getUserTeam(address);
 
-      // Need to submit a team before viewing this section
       if (!submitted || fetchedPlayerIds.length === 0) {
         alert("You haven't submitted a team yet. Redirecting to selection.");
         window.location.href = "/select";
         return;
       }
 
-      // Mapping to get IDs/names
       const playerIds = fetchedPlayerIds.map((id: ethers.BigNumberish) => Number(id));
+      const captainId = Number(fetchedCaptainId ?? 0);
 
-      // Get names using IDs, then parse stats for each player
+      let teamTotal = 0;
+
+      const toNumber = (v: any) => {
+        const n = Number(v ?? 0);
+        return isNaN(n) ? 0 : n;
+      };
+
       const statsPromises = playerIds.map(async (id) => {
         const playerData = await contract.players(id);
-        let parsedStats = {};
+        let parsedStats: { [key: string]: any } = {};
 
-        // Check rawStats is a non-empty string AND not the literal string "undefined"
         if (
-          typeof playerData.rawStats === 'string' &&
-          playerData.rawStats.trim() !== '' &&
-          playerData.rawStats.trim().toLowerCase() !== 'undefined'
+          typeof playerData.rawStats === "string" &&
+          playerData.rawStats.trim() !== "" &&
+          playerData.rawStats.trim().toLowerCase() !== "undefined"
         ) {
           try {
             parsedStats = JSON.parse(playerData.rawStats);
           } catch (e) {
             console.warn(`Could not parse rawStats for player ${playerData.id}`, e);
           }
-        } else {
-          console.warn(`Invalid or missing rawStats for player ${playerData.id}`);
         }
 
-        // Return the formatted player data
+        // Read base numeric points from parsedStats (safe conversion)
+        const baseTotal = toNumber(parsedStats?.current_TOTAL_POINTS ?? 0);
+        const baseBatting = toNumber(parsedStats?.current_BATTING_POINTS ?? 0);
+        const baseBowling = toNumber(parsedStats?.current_BOWLING_POINTS ?? 0);
+        const baseFielding = toNumber(parsedStats?.current_FIELDING_POINTS ?? 0);
+
+        const isCaptain = Number(playerData.id) === captainId;
+
+        // Double only the player's TOTAL points for captain; leave component breakdowns as-is
+        // (If you want to double components instead, change the logic here.)
+        const displayTotal = isCaptain ? baseTotal * 2 : baseTotal;
+
+        teamTotal += displayTotal;
+
         return {
           id: Number(playerData.id),
           name: playerData.name,
           parsedStats,
-        };
+          isCaptain,
+          displayPoints: {
+            total: displayTotal,
+            batting: baseBatting,
+            bowling: baseBowling,
+            fielding: baseFielding,
+          },
+        } as Player;
       });
 
       const statsData = await Promise.all(statsPromises);
       setTeamPlayers(statsData);
       setUserName(fetchedUserName);
       setTeamName(fetchedTeamName);
+      setTotalPoints(teamTotal);
       setLoading(false);
     }
 
@@ -88,9 +123,11 @@ const MyTeam: React.FC = () => {
   return (
     <div style={{ padding: "2rem", maxWidth: "1000px", margin: "0 auto" }}>
       <h2>My Fantasy Team</h2>
-      <p><strong>Wallet:</strong> {walletAddress}</p>
-      <p><strong>Username:</strong> {userName}</p>
-      <p><strong>Team Name:</strong> {teamName}</p>
+      <p>
+        <strong>Username:</strong> {userName} •{" "}
+        <strong>Team Name:</strong> {teamName} •{" "}
+        <strong>Total Points:</strong> {totalPoints}
+      </p>
 
       <table
         className="table"
@@ -117,20 +154,16 @@ const MyTeam: React.FC = () => {
                 style={{ color: "blue", cursor: "pointer" }}
                 onClick={() => setSelectedPlayer(player)}
               >
-                {player.name}
+                {player.name} {player.isCaptain ? <strong>(C)</strong> : null}
               </td>
-              <td>{player.parsedStats.current_TOTAL_POINTS}</td>
-              <td>{player.parsedStats.current_BATTING_POINTS}</td>
-              <td>{player.parsedStats.current_BOWLING_POINTS}</td>
-              <td>{player.parsedStats.current_FIELDING_POINTS}</td>
+              <td>{player.displayPoints?.total ?? 0}</td>
+              <td>{player.displayPoints?.batting ?? 0}</td>
+              <td>{player.displayPoints?.bowling ?? 0}</td>
+              <td>{player.displayPoints?.fielding ?? 0}</td>
             </tr>
           ))}
         </tbody>
       </table>
-
-      <button onClick={() => (window.location.href = "/select")} style={{ marginTop: "2rem" }}>
-        Back to Team Selection
-      </button>
 
       {selectedPlayer && (
         <PlayerModal

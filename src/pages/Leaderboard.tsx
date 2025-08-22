@@ -1,138 +1,255 @@
-import React, { useEffect, useState } from 'react'
-import { BrowserProvider, ethers } from 'ethers'
-import { getFantasyLeagueContract } from '../utils/contract'
+import React, { useEffect, useState } from "react";
+import { BrowserProvider, ethers } from "ethers";
+import { getFantasyLeagueContract } from "../utils/contract";
+import PlayerModal from "../components/PlayerModal";
 
-// Structure of data to put in the leaderboard (from various functions)
-interface TeamData {
-  address: string
-  playerIds: number[]
-  score: number
-  userName: string
-  teamName: string
-}
+type Player = {
+  id: number;
+  name: string;
+  parsedStats: { [key: string]: string | number };
+  isCaptain?: boolean;
+  displayPoints?: {
+    total: number;
+    batting: number;
+    bowling: number;
+    fielding: number;
+  };
+};
+
+type LeaderboardEntry = {
+  address: string;
+  username: string;
+  teamName: string;
+  totalPoints: number;
+};
 
 const Leaderboard: React.FC = () => {
-  const [teams, setTeams] = useState<TeamData[]>([])
-  const [loading, setLoading] = useState(true)
-  const [prizePool, setPrizePool] = useState<string | null>(null)
-  const [ethToGbp, setEthToGbp] = useState<number | null>(null)
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedUser, setSelectedUser] = useState<LeaderboardEntry | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<Player[]>([]);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [statView, setStatView] = useState<"current" | "previous">("current");
 
   useEffect(() => {
-    async function fetchLeaderboard() {
-      try {
-        const provider = new BrowserProvider(window.ethereum)
-        const contract = getFantasyLeagueContract(provider)
+    async function loadLeaderboard() {
+      if (!window.ethereum) return;
 
-        // Fetch prize pool from contract
-        const pool = await contract.getPrizePool()
-        const formattedPool = ethers.formatEther(pool)
-        setPrizePool(formattedPool)
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = getFantasyLeagueContract(signer);
 
-        // Fetch ETH to GBP conversion rate
-        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=gbp')
-        const data = await res.json()
-        setEthToGbp(data.ethereum.gbp)
+      // Fetch participants (addresses)
+      const participants: string[] = await contract.getParticipants();
+      const entries: LeaderboardEntry[] = [];
 
-        const participants: string[] = await contract.getParticipants()
-        const leaderboard: TeamData[] = []    // Initially empty list of TeamData's
+      // Helper to safely convert to number
+      const toNumber = (v: any) => {
+        const n = Number(v ?? 0);
+        return isNaN(n) ? 0 : n;
+      };
 
-        // Get team data for each participant
-        for (const addr of participants) {
-          const [playerIds, submitted, fetchedUserName, fetchedTeamName] = await contract.getUserTeam(addr)
-          if (!submitted) continue
+      for (const address of participants) {
+        // getUserTeam returns: (playerIds, submitted, playerName, teamName, userRank, captain)
+        const [ids, submitted, username, teamName, _rank, captainIdRaw] = await contract.getUserTeam(address);
 
-          // Get player IDs from the mapping 
-          const numericIds = playerIds.map((id) => Number(id))
+        if (!submitted || ids.length === 0) continue;
 
-        let totalPoints = 0
+        const captainId = Number(captainIdRaw ?? 0);
 
-        // Parse the stats of each player to convert to JSON format (originally stored as a string in the contract)
-        for (const id of numericIds) {
-          const stats = await contract.players(id)
+        let teamTotal = 0;
+        for (const id of ids) {
+          // id may be BigNumber or number
+          const numericId = Number(id);
+          const playerData = await contract.players(numericId);
 
-          let parsedStats = null
-          try {
-            parsedStats = JSON.parse(stats.rawStats)
-          } catch (err) {
-            console.warn(`Failed to parse rawStats for player ${id}`, err)
-            continue
+          // Parse rawStats safely
+          let parsedStats: { [key: string]: any } = {};
+          if (
+            typeof playerData.rawStats === "string" &&
+            playerData.rawStats.trim() !== "" &&
+            playerData.rawStats.trim().toLowerCase() !== "undefined"
+          ) {
+            try {
+              parsedStats = JSON.parse(playerData.rawStats);
+            } catch (e) {
+              parsedStats = {};
+            }
           }
 
-          const playerPoints = Number(parsedStats?.current_TOTAL_POINTS ?? 0)
-          totalPoints += isNaN(playerPoints) ? 0 : playerPoints
+          const baseTotal = toNumber(parsedStats?.current_TOTAL_POINTS ?? 0);
+
+          // Double captain total points
+          const displayTotal = numericId === captainId ? baseTotal * 2 : baseTotal;
+
+          teamTotal += displayTotal;
         }
 
-          leaderboard.push({
-            address: addr,
-            playerIds: numericIds,
-            score: totalPoints,
-            userName: fetchedUserName,
-            teamName: fetchedTeamName,
-          })
-        }
-
-        // Sort descending by score
-        leaderboard.sort((a, b) => b.score - a.score)
-
-        setTeams(leaderboard)
-        setLoading(false)
-      } catch (err) {
-        console.error('Error loading leaderboard:', err)
-        setLoading(false)
+        entries.push({
+          address,
+          username,
+          teamName,
+          totalPoints: teamTotal,
+        });
       }
+
+      // Sort descending
+      entries.sort((a, b) => b.totalPoints - a.totalPoints);
+      setLeaderboard(entries);
+      setLoading(false);
     }
 
-    fetchLeaderboard()
-  }, [])
+    loadLeaderboard();
+  }, []);
 
-  // Let the user know that leaderboard data is being fetched/compiled
-  if (loading) return <p>Loading leaderboard...</p>
+  const handleRowClick = async (entry: LeaderboardEntry) => {
+    if (!window.ethereum) return;
+    setSelectedUser(entry);
 
-  // Round price to pence
-  const prizeInGbp =
-    prizePool && ethToGbp ? (parseFloat(prizePool) * ethToGbp).toFixed(2) : null
+    const provider = new BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const contract = getFantasyLeagueContract(signer);
+
+    // getUserTeam returns: (playerIds, submitted, playerName, teamName, userRank, captain)
+    const [ids, submitted, username, teamName, _rank, captainIdRaw] = await contract.getUserTeam(entry.address);
+    const captainId = Number(captainIdRaw ?? 0);
+
+    const toNumber = (v: any) => {
+      const n = Number(v ?? 0);
+      return isNaN(n) ? 0 : n;
+    };
+
+    const teamPromises = ids.map(async (id: ethers.BigNumberish) => {
+      const numericId = Number(id);
+      const playerData = await contract.players(numericId);
+      let parsedStats: { [key: string]: any } = {};
+
+      if (
+        typeof playerData.rawStats === "string" &&
+        playerData.rawStats.trim() !== "" &&
+        playerData.rawStats.trim().toLowerCase() !== "undefined"
+      ) {
+        try {
+          parsedStats = JSON.parse(playerData.rawStats);
+        } catch {
+          parsedStats = {};
+        }
+      }
+
+      const baseTotal = toNumber(parsedStats?.current_TOTAL_POINTS ?? 0);
+      const baseBatting = toNumber(parsedStats?.current_BATTING_POINTS ?? 0);
+      const baseBowling = toNumber(parsedStats?.current_BOWLING_POINTS ?? 0);
+      const baseFielding = toNumber(parsedStats?.current_FIELDING_POINTS ?? 0);
+
+      const isCaptain = numericId === captainId;
+      const displayTotal = isCaptain ? baseTotal * 2 : baseTotal;
+
+      return {
+        id: Number(playerData.id),
+        name: playerData.name,
+        parsedStats: parsedStats || {},
+        isCaptain,
+        displayPoints: {
+          total: displayTotal,
+          batting: baseBatting,
+          bowling: baseBowling,
+          fielding: baseFielding,
+        },
+      } as Player;
+    });
+
+    const team = await Promise.all(teamPromises);
+    setSelectedTeam(team);
+  };
+
+  if (loading) return <p>Loading leaderboard...</p>;
 
   return (
-    <div style={{ padding: '20px' }}>
-      <h2>🏆 League Leaderboard</h2>
-
-      {prizePool && (
-        <p style={{ fontSize: '18px', marginBottom: '20px' }}>
-          💰 <strong>Total Prize Pool:</strong> {prizePool} ETH
-          {prizeInGbp && (
-            <span style={{ marginLeft: '10px', color: '#555' }}>
-              (~£{prizeInGbp} GBP)
-            </span>
-          )}
-        </p>
-      )}
-
-      {teams.length === 0 ? (
-        <p>No submitted teams found.</p>
-      ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+    <div style={{ padding: "2rem" }}>
+      <h2>Leaderboard</h2>
+      <table className="table" style={{ width: "100%", marginTop: "1rem" }}>
         <thead>
           <tr>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>#</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>Team Name</th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc' }}>Username</th>
-            <th style={{ textAlign: 'center', borderBottom: '1px solid #ccc' }}>Score</th>
+            <th>Rank</th>
+            <th>User</th>
+            <th>Team</th>
+            <th>Total Points</th>
           </tr>
         </thead>
         <tbody>
-          {teams.map((team, index) => (
-            <tr key={team.address}>
-              <td>{index + 1}</td>
-              <td>{team.teamName}</td>
-              <td>{team.userName}</td>
-              <td style={{ textAlign: 'center' }}>{team.score}</td>
+          {leaderboard.map((entry, idx) => (
+            <tr
+              key={entry.address}
+              onClick={() => handleRowClick(entry)}
+              style={{
+                cursor: "pointer",
+                transition: "background-color 0.2s ease",
+              }}
+              title="Click to view this player's team"
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.backgroundColor = "#f0f8ff")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.backgroundColor = "")
+              }
+            >
+              <td><strong>{idx + 1}</strong></td>
+              <td>{entry.username}</td>
+              <td>{entry.teamName}</td>
+              <td>{entry.totalPoints}</td>
             </tr>
           ))}
         </tbody>
-        </table>
+      </table>
+
+      {selectedUser && selectedTeam.length > 0 && (
+        <div style={{ marginTop: "2rem" }}>
+          <h3>
+            {selectedUser.username}'s Team ({selectedUser.teamName}) –{" "}
+            {selectedUser.totalPoints} pts
+          </h3>
+          <table className="table" style={{ width: "100%", marginTop: "1rem" }}>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Player</th>
+                <th>Total</th>
+                <th>Batting</th>
+                <th>Bowling</th>
+                <th>Fielding</th>
+              </tr>
+            </thead>
+            <tbody>
+              {selectedTeam.map((player, idx) => (
+                <tr key={player.id}>
+                  <td>{idx + 1}</td>
+                  <td
+                    style={{ color: "blue", cursor: "pointer" }}
+                    onClick={() => setSelectedPlayer(player)}
+                  >
+                    {player.name} {player.isCaptain ? <strong>(C)</strong> : null}
+                  </td>
+                  <td>{player.displayPoints?.total ?? 0}</td>
+                  <td>{player.displayPoints?.batting ?? 0}</td>
+                  <td>{player.displayPoints?.bowling ?? 0}</td>
+                  <td>{player.displayPoints?.fielding ?? 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {selectedPlayer && (
+        <PlayerModal
+          player={selectedPlayer}
+          onClose={() => setSelectedPlayer(null)}
+          statView={statView}
+          setStatView={setStatView}
+        />
       )}
     </div>
-  )
-}
+  );
+};
 
-export default Leaderboard
+export default Leaderboard;
