@@ -4,6 +4,8 @@ import { BrowserProvider } from 'ethers'
 import { getFantasyLeagueContract } from '../utils/contract'
 import { ethers } from 'ethers'
 import PlayerModal from "../components/PlayerModal";
+import MetaMaskInfoModal from "../components/MetaMaskInfoModal";
+import ErrorModal from "../components/ErrorModal";
 
 // Player data structure - Returned by the contract
 interface PlayerFromContract {
@@ -32,14 +34,19 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
   const [sortKey, setSortKey] = useState<keyof Player | 'PRICE'>('current_TOTAL_POINTS')
   const [sortAsc, setSortAsc] = useState(false)
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
+  const [captain, setCaptain] = useState<Player | null>(null)
   const [statView, setStatView] = useState<'current' | 'previous'>('current')
   const [players, setPlayers] = useState<Player[]>([])
+  const [showMetaMaskModal, setShowMetaMaskModal] = useState(false)
+  const [pendingJoinAction, setPendingJoinAction] = useState<null | (() => Promise<void>)>(null)
+  const [entryFeeDisplay, setEntryFeeDisplay] = useState("")
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const playersPerPage = 10
 
   const sortedPlayers = [...players].sort((a, b) => {
-    const valA = sortKey === 'PRICE' ? Number(a.price) : Number(a.parsedStats[sortKey] || 0)
-    const valB = sortKey === 'PRICE' ? Number(b.price) : Number(b.parsedStats[sortKey] || 0)
+    const valA = sortKey === 'PRICE' ? Number(a.price) : Number((a.parsedStats as any)[sortKey] || 0)
+    const valB = sortKey === 'PRICE' ? Number(b.price) : Number((b.parsedStats as any)[sortKey] || 0)
     return sortAsc ? valA - valB : valB - valA
   })
 
@@ -70,21 +77,8 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
   const maxTeamSize = 11
   const teamBudget = 100_000_000
 
-  // Fetch players and wallet from contract
+  // Fetch players from contract
   useEffect(() => {
-    async function fetchWallet() {
-      if ((window as any).ethereum) {
-        const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' })
-        const address = accounts[0]
-        setWalletAddress(address)
-
-        // Reset team when new account is used
-        setMainPlayers([])
-        setReservePlayer(null)
-        localStorage.removeItem(`team-${address}`)
-      }
-    }
-
     async function loadPlayersFromContract() {
       try {
         const provider = new BrowserProvider(window.ethereum);
@@ -99,7 +93,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
 
             // Fetch percentage (scaled by 1e18 in contract)
             const percentageScaled = await contract.getPlayerSelectionPercentage(id);
-            const percentage = Number(percentageScaled) / 1e16;         // Scale
+            const percentage = Number(percentageScaled) / 1e16; // Scale
 
             return {
               id: player.id,
@@ -107,7 +101,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
               price: player.price,
               rawStats: player.rawStats,
               parsedStats,
-              selectionPercentage: percentage // store as %
+              selectionPercentage: percentage // store as % (e.g. 12.34)
             };
           })
         );
@@ -119,8 +113,66 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
     }
 
     loadPlayersFromContract()
-    fetchWallet()
   }, [])
+
+  // Fetch wallet & reset when new account selected
+  useEffect(() => {
+    async function fetchWallet() {
+      if ((window as any).ethereum) {
+        const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' })
+        const address = accounts[0]
+        setWalletAddress(address)
+
+        const provider = new BrowserProvider(window.ethereum)
+        const contract = getFantasyLeagueContract(provider)
+        const alreadyJoined = await contract.hasJoined(address)
+
+        if (alreadyJoined) {
+          onTeamSubmit()
+          return
+        }
+
+        // Reset team when new account is used
+        setMainPlayers([])
+        setReservePlayer(null)
+        setCaptain(null)
+        // keep localStorage for other addresses, but remove the cached team for this new address to avoid stale data
+        // (we'll restore if there is a saved team below)
+        // localStorage.removeItem(`team-${address}`)
+      }
+    }
+
+    fetchWallet()
+  }, [onTeamSubmit])
+
+  // Restore saved team (main/reserve/captain) from localStorage once players+wallet are available
+  useEffect(() => {
+    if (!walletAddress || players.length === 0) return
+
+    const raw = localStorage.getItem(`team-${walletAddress}`)
+    if (!raw) return
+
+    try {
+      const parsed = JSON.parse(raw)
+      const savedMain: { id: string, price: string }[] = parsed.main || []
+      const savedReserve: { id: string, price: string } | null = parsed.reserve || null
+      const savedCaptainId: string | null = parsed.captain || null
+
+      // map saved ids back to Player objects
+      const mainMapped: Player[] = savedMain
+        .map(s => players.find(p => p.id.toString() === s.id))
+        .filter(Boolean) as Player[]
+
+      const reserveMapped: Player | null = savedReserve ? (players.find(p => p.id.toString() === savedReserve.id) || null) : null
+      const captainMapped: Player | null = savedCaptainId ? (players.find(p => p.id.toString() === savedCaptainId) || null) : null
+
+      if (mainMapped.length > 0) setMainPlayers(mainMapped)
+      if (reserveMapped) setReservePlayer(reserveMapped)
+      if (captainMapped) setCaptain(captainMapped)
+    } catch (err) {
+      console.warn("Failed to restore saved team:", err)
+    }
+  }, [walletAddress, players])
 
   const teamPrice = Number([...mainPlayers, ...(reservePlayer ? [reservePlayer] : [])].reduce(
     (sum, p) => sum + p.price,
@@ -134,6 +186,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
 
     if (isMain) {
       setMainPlayers(mainPlayers.filter(p => p.id !== player.id))
+      if (captain?.id === player.id) setCaptain(null) // clear captain if removed
       return
     }
     if (isReserve) {
@@ -150,19 +203,50 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
     }
   }
 
-  // Row background for selected players
+  // Row background / captain highlight for selected players
   const getRowStyle = (player: Player): React.CSSProperties => {
-    if (mainPlayers.some(p => p.id === player.id)) return { backgroundColor: '#d0f0c0' }
-    if (reservePlayer?.id === player.id) return { backgroundColor: '#cce5ff' }
-    return {}
+    const base: React.CSSProperties = {}
+    if (mainPlayers.some(p => p.id === player.id)) base.backgroundColor = '#d0f0c0'
+    if (reservePlayer?.id === player.id) base.backgroundColor = '#cce5ff'
+    if (captain?.id === player.id) {
+      base.border = '2px solid #ffd700'
+      base.borderRadius = '4px'
+    }
+    return base
+  }
+
+  // submitTeam now calls the updated contract signature that accepts captain id
+  const submitTeam = async (
+    contract: any,
+    selectedIds: bigint[],
+    userName: string,
+    teamName: string,
+    userAddress: string
+  ) => {
+    // NOTE: updated contract signature: submitTeam(uint256[] selectedPlayers, string playerName, string teamName, uint256 captainId)
+    const captainIdToSend = captain ? BigInt(captain.id) : BigInt(0)
+    const tx = await contract.submitTeam(selectedIds.map(id => BigInt(id)), userName, teamName, captainIdToSend)
+    await tx.wait()
+
+    // Save team and captain locally
+    localStorage.setItem(
+      `team-${userAddress}`,
+      JSON.stringify({
+        main: mainPlayers.map(p => ({ ...p, id: p.id.toString(), price: p.price.toString() })),
+        reserve: reservePlayer ? { ...reservePlayer, id: reservePlayer.id.toString(), price: reservePlayer.price.toString() } : null,
+        captain: captain ? captain.id.toString() : null
+      })
+    )
+    onTeamSubmit()
   }
 
   const handleSubmitTeam = async () => {
     const totalSelected = mainPlayers.length + (reservePlayer ? 1 : 0)
     if (totalSelected !== 12) return alert("Select 11 main + 1 reserve player.")
-    if (teamPrice > teamBudget) return alert("Budget exceeded.")
+    if (!captain) return alert("Please select a captain before submitting.")
+    if ((Math.round(teamPrice / 10000) * 10000) > teamBudget) return alert("Budget exceeded.\nPrice: " + (Math.floor(teamPrice / 10000) * 10000) + "\nBudget: " + teamBudget)
     if (!walletAddress) return alert("Connect wallet.")
-    if (!userName || !teamName) return alert("Enter name and team.")
+    if (!userName || !teamName) return alert("Enter username and team name.")
 
     const selectedIds = [...mainPlayers.map(p => p.id), reservePlayer!.id]
 
@@ -175,43 +259,48 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
       const alreadyJoined = await contract.hasJoined(userAddress)
       const entryFee = await contract.entryFee()
 
-      // Check for address already in the league, and pay entry fee if not
       if (!alreadyJoined) {
-        const confirmJoin = window.confirm(
-          `You haven't paid the entry fee yet. Entry fee is ${ethers.formatEther(entryFee)} ETH. Proceed?`
-        )
-        if (!confirmJoin) return
-        const joinTx = await contract.joinLeague({ value: entryFee })
-        await joinTx.wait()
+        setEntryFeeDisplay(ethers.formatEther(entryFee))
+        setShowMetaMaskModal(true)
+
+        setPendingJoinAction(() => async () => {
+          try {
+            setLoading(true)
+            const joinTx = await contract.joinLeague({ value: entryFee })
+            await joinTx.wait()
+            await submitTeam(contract, selectedIds, userName, teamName, userAddress)
+          } catch (err: any) {
+            console.error("Join/Submit error:", err)
+            setErrorMessage("Failed to join league or submit team. Please try again.")
+            setLoading(false)
+          }
+        })
+        return
       }
 
-      // Submit team and user info to contract
-      const tx = await contract.submitTeam(
-        selectedIds.map(id => BigInt(id)),
-        userName,
-        teamName
-      )
-      await tx.wait()
-
-      // Team stored in local storage to improve retrieval time (and lower query costs) when loading team on next page
-      localStorage.setItem(
-        `team-${userAddress}`,
-        JSON.stringify({
-          main: mainPlayers.map(p => ({ ...p, id: p.id.toString(), price: p.price.toString() })),
-          reserve: reservePlayer ? { ...reservePlayer, id: reservePlayer.id.toString(), price: reservePlayer.price.toString() } : null,
-        })
-      )
-      alert("Team submitted successfully!")
-      onTeamSubmit()
-      navigate('/myteam')
+      await submitTeam(contract, selectedIds, userName, teamName, userAddress)
     } catch (err: any) {
-      console.error(err)
-      alert(err.message || "Submission failed.")
-    } finally {
+      console.error("Submission error:", err)
+
+      let userFriendlyMessage = "Something went wrong. Please try again."
+
+      if (err.code === 4001) {
+        // MetaMask user rejected transaction
+        userFriendlyMessage = "You rejected the transaction in MetaMask. If this was a mistake, please confirm it again."
+      } else if (err.message?.includes("insufficient funds")) {
+        userFriendlyMessage = "You don't have enough ETH to cover the entry fee + gas. Please top up your wallet."
+      } else if (err.message?.includes("already submitted")) {
+        userFriendlyMessage = "You have already submitted a team. Only one submission per account is allowed."
+      } else if (err.message?.includes("userName") || err.message?.includes("teamName")) {
+        userFriendlyMessage = "Please make sure you have entered both a username and team name before submitting."
+      } else if (err.message?.includes("Team name taken")) {
+        userFriendlyMessage = "Sorry, this team name is already in use."
+      }
+
+      setErrorMessage(userFriendlyMessage)
       setLoading(false)
     }
   }
-
 
   // Render the UI
   return (
@@ -268,38 +357,98 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
             <th style={thStyle} onClick={() => handleSort('current_FIELDING_POINTS')}>Fielding</th>
             <th style={thStyle}>Selection %</th>
             <th style={thStyle} onClick={() => handleSort('PRICE')}>Price (£M)</th>
+            <th style={thStyle}>Captain?</th>
           </tr>
         </thead>
         <tbody>
           {paginatedPlayers.map((player, idx) => (
             <tr
-              key={player.id}
+              key={player.id.toString()}
               onClick={() => togglePlayer(player)}
               style={{ cursor: 'pointer', ...getRowStyle(player) }}
             >
               <td style={tdStyle}>{(currentPage - 1) * playersPerPage + idx + 1}</td>
-              <td style={{ ...tdStyle, color: 'blue' }} onClick={() => setSelectedPlayer(player)}>
+              <td
+                style={{ ...tdStyle, color: 'blue', textDecoration: 'underline', cursor: 'pointer' }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedPlayer(player)
+                }}
+              >
                 {player.name}
               </td>
-              <td style={tdStyle}>{player.parsedStats['current_TOTAL_POINTS']}</td>
-              <td style={tdStyle}>{player.parsedStats['current_BATTING_POINTS']}</td>
-              <td style={tdStyle}>{player.parsedStats['current_BOWLING_POINTS']}</td>
-              <td style={tdStyle}>{player.parsedStats['current_FIELDING_POINTS']}</td>
+              <td style={tdStyle}>{(player.parsedStats as any)['current_TOTAL_POINTS']}</td>
+              <td style={tdStyle}>{(player.parsedStats as any)['current_BATTING_POINTS']}</td>
+              <td style={tdStyle}>{(player.parsedStats as any)['current_BOWLING_POINTS']}</td>
+              <td style={tdStyle}>{(player.parsedStats as any)['current_FIELDING_POINTS']}</td>
               <td style={tdStyle}>
                 {player.selectionPercentage.toFixed(2)}%
               </td>
               <td style={tdStyle}>
                 {(Number(player.price) / 1_000_000).toFixed(2)}
               </td>
+              <td style={tdStyle}>
+                {mainPlayers.some(p => p.id === player.id) ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setCaptain(captain?.id === player.id ? null : player)
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      backgroundColor: captain?.id === player.id ? '#ffd700' : '#eee',
+                      border: '1px solid #aaa',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {captain?.id === player.id ? "Captain" : "Set"}
+                  </button>
+                ) : (
+                  <span style={{ color: '#999' }}>—</span>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      <div style={{ marginTop: '1rem' }}>
-        <strong>Main Players:</strong> {mainPlayers.length} / 11 &nbsp; | &nbsp;
-        <strong>Reserve:</strong> {reservePlayer ? "✓" : "✗"} &nbsp; | &nbsp;
-        <strong>Total Price:</strong> £{(teamPrice / 1_000_000).toFixed(2)}M / £100M
+      {/* TEAM STATUS */}
+      <div style={{
+        margin: '1rem 0',
+        fontSize: '0.95rem',
+        color: '#444',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '0.5rem'
+      }}>
+        {/* Players */}
+        <div>
+          <strong>Current Selection: </strong>{mainPlayers.length}/11 main, {reservePlayer ? "1/1" : "0/1"} reserve
+          {captain ? <span style={{ marginLeft: '0.6rem' }}>• <strong>Captain:</strong> {captain.name}</span> : null}
+        </div>
+
+        {/* Budget with slim bar */}
+        <div style={{ flex: '1', maxWidth: '280px' }}>
+          <strong>Remaining Budget: </strong>£{(teamPrice / 1_000_000).toFixed(2)}M / £100M
+          <div style={{
+            height: '6px',
+            borderRadius: '4px',
+            backgroundColor: '#eee',
+            marginTop: '3px',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              width: `${Math.min((teamPrice / teamBudget) * 100, 100)}%`,
+              height: '100%',
+              backgroundColor: teamPrice > teamBudget ? '#d9534f'
+                              : teamPrice > teamBudget * 0.85 ? '#f0ad4e'
+                              : '#5bc0de',
+              transition: 'width 0.3s ease'
+            }} />
+          </div>
+        </div>
       </div>
 
       <div style={{ marginTop: '1rem', textAlign: 'center' }}>
@@ -322,15 +471,15 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
 
       <button
         onClick={handleSubmitTeam}
-        disabled={mainPlayers.length !== 11 || !reservePlayer}
+        disabled={mainPlayers.length !== 11 || !reservePlayer || !captain}
         style={{
           marginTop: '1.5rem',
           padding: '12px 24px',
-          backgroundColor: mainPlayers.length === 11 && reservePlayer ? '#007bff' : '#ccc',
+          backgroundColor: mainPlayers.length === 11 && reservePlayer && captain ? '#007bff' : '#ccc',
           color: 'white',
           border: 'none',
           borderRadius: '5px',
-          cursor: mainPlayers.length === 11 && reservePlayer ? 'pointer' : 'not-allowed'
+          cursor: mainPlayers.length === 11 && reservePlayer && captain ? 'pointer' : 'not-allowed'
         }}
       >
         Submit Team
@@ -342,6 +491,24 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
           onClose={() => setSelectedPlayer(null)}
           statView={statView}
           setStatView={setStatView}
+        />
+      )}
+
+      {showMetaMaskModal && (
+        <MetaMaskInfoModal
+          entryFee={entryFeeDisplay}
+          onConfirm={async () => {
+            setShowMetaMaskModal(false)
+            if (pendingJoinAction) await pendingJoinAction()
+          }}
+          onCancel={() => setShowMetaMaskModal(false)}
+        />
+      )}
+
+      {errorMessage && (
+        <ErrorModal
+          message={errorMessage}
+          onClose={() => setErrorMessage(null)}
         />
       )}
     </div>

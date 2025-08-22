@@ -1,9 +1,11 @@
-// src/components/Navbar.tsx
-
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
-const Navbar: React.FC = () => {
+type NavbarProps = {
+  isOracle: boolean
+}
+
+const Navbar: React.FC<NavbarProps> = ({ isOracle }) => {
   const location = useLocation()
 
   const linkStyle = (path: string) => ({
@@ -13,10 +15,10 @@ const Navbar: React.FC = () => {
     color: location.pathname === path ? '#fff' : '#ccc',
     backgroundColor: location.pathname === path ? '#007bff' : 'transparent',
     borderRadius: '8px',
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    cursor: 'pointer'
   })
 
-  // Render UI with links to different pages
   return (
     <nav style={{
       display: 'flex',
@@ -28,10 +30,16 @@ const Navbar: React.FC = () => {
     }}>
       <h2 style={{ color: '#fff' }}>🏏 Fantasy League</h2>
       <div>
-        <Link to="/" style={linkStyle('/')}>My Team</Link>
+        <Link to="/myteam" style={linkStyle('/myteam')}>My Team</Link>
         <Link to="/leaderboard" style={linkStyle('/leaderboard')}>Leaderboard</Link>
         <Link to="/updateUserInfo" style={linkStyle('/updateUserInfo')}>Update User Info</Link>
-        <Link to="/endSeasonAndDistribute" style={linkStyle('/endSeasonAndDistribute')}>End Season and Distribute</Link>
+
+        {isOracle && ( // Only show if Oracle
+          <Link to="/endSeasonAndDistribute" style={linkStyle('/endSeasonAndDistribute')}>
+            End Season and Distribute
+          </Link>
+        )}
+
         <Link to="/pastSeasons" style={linkStyle('/pastSeasons')}>Past Seasons</Link>
       </div>
     </nav>

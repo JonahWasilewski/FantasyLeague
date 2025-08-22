@@ -8,6 +8,7 @@ interface Player {
   id: number | bigint
   name: string
   parsedStats: { [key: string]: string | number }
+  isCaptain?: boolean // <-- mark if player is captain
 }
 
 // Structure expected by the player modal component (for formatting)
@@ -24,51 +25,73 @@ const PlayerModal: React.FC<PlayerModalProps> = ({
   setStatView,
   onClose,
 }) => {
+  const currentYear = new Date().getFullYear()
+  const previousYear = currentYear - 1
+
   return (
     <div style={modalBackdrop}>
       <div style={modalStyle}>
-        <h3>{player.name}</h3>
+        {/* Player name + captain badge if applicable */}
+        <h3 style={{ marginBottom: '0.5rem' }}>
+          {player.name}{' '}
+          {player.isCaptain && (
+            <span
+              style={{
+                fontSize: '0.85rem',
+                color: '#fff',
+                backgroundColor: '#f59e0b', // amber
+                padding: '2px 8px',
+                borderRadius: '12px',
+                marginLeft: '0.5rem',
+              }}
+            >
+              Captain
+            </span>
+          )}
+        </h3>
 
+        {/* Year toggle */}
         <div style={{ marginBottom: '1rem' }}>
           <button
             onClick={() => setStatView('current')}
             style={{
               marginRight: '10px',
               padding: '6px 12px',
-              backgroundColor: statView === 'current' ? '#007bff' : '#ddd',
+              backgroundColor: statView === 'current' ? '#007bff' : '#eee',
               color: statView === 'current' ? 'white' : 'black',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
             }}
           >
-            Current
+            {currentYear}
           </button>
           <button
             onClick={() => setStatView('previous')}
             style={{
               padding: '6px 12px',
-              backgroundColor: statView === 'previous' ? '#007bff' : '#ddd',
+              backgroundColor: statView === 'previous' ? '#007bff' : '#eee',
               color: statView === 'previous' ? 'white' : 'black',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
             }}
           >
-            Previous
+            {previousYear}
           </button>
         </div>
 
+        {/* Stats table */}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <tbody>
             {Object.entries({
               Batting: [
                 'RUNS_x',
-                'HIGH SCORE',
+                'HIGH_SCORE',
                 'AVG',
                 '50s',
                 '100s',
-                'STRIKE RATE_x',
+                'STRIKE_RATE_x',
                 'BATTING_POINTS',
               ],
               Bowling: [
@@ -76,22 +99,22 @@ const PlayerModal: React.FC<PlayerModalProps> = ({
                 'MAIDENS',
                 'RUNS_y',
                 'WICKETS',
-                'BEST BOWLING',
-                '5 WICKET HAUL',
-                'ECONOMY RATE',
-                'STRIKE RATE_y',
+                'BEST_BOWLING',
+                '5_WICKET_HAUL',
+                'ECONOMY_RATE',
+                'STRIKE_RATE_y',
                 'AVERAGE',
                 'BOWLING_POINTS',
               ],
               Fielding: [
-                'WICKET KEEPING CATCHES',
+                'WICKET_KEEPING_CATCHES',
                 'STUMPINGS',
-                'TOTAL WICKET KEEPING WICKETS',
-                'FIELDING CATCHES',
-                'RUN OUTS',
-                'TOTAL FIELDING WICKETS',
-                'TOTAL CATCHES',
-                'TOTAL VICTIMS',
+                'TOTAL_WICKET_KEEPING_WICKETS',
+                'FIELDING_CATCHES',
+                'RUN_OUTS',
+                'TOTAL_FIELDING WICKETS',
+                'TOTAL_CATCHES',
+                'TOTAL_VICTIMS',
                 'FIELDING_POINTS',
               ],
             }).map(([section, keys]) => (
