@@ -1,4 +1,4 @@
-export const fantasyLeagueAddress = "0x41313D3069020DE03daFB2e9FE033e0af711dDFe";
+export const fantasyLeagueAddress = "0xBb43A177df591dF102F68595Dbd35aCcb0a29b98";
 
 export const fantasyLeagueABI = [
     {
@@ -47,6 +47,31 @@ export const fantasyLeagueABI = [
         }
       ],
       "name": "NewSeasonStarted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "season",
+          "type": "uint256"
+        }
+      ],
+      "name": "OwnerPaid",
       "type": "event"
     },
     {
@@ -123,6 +148,43 @@ export const fantasyLeagueABI = [
         }
       ],
       "name": "PointsRecorded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "season",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "PlayerName",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "teamName",
+          "type": "string"
+        }
+      ],
+      "name": "PrizePaid",
       "type": "event"
     },
     {
@@ -258,6 +320,12 @@ export const fantasyLeagueABI = [
           "internalType": "uint256[]",
           "name": "playerIds",
           "type": "uint256[]"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "captainId",
+          "type": "uint256"
         }
       ],
       "name": "TeamSubmitted",
@@ -467,6 +535,11 @@ export const fantasyLeagueABI = [
           "internalType": "bool",
           "name": "",
           "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -707,6 +780,11 @@ export const fantasyLeagueABI = [
           "internalType": "string",
           "name": "",
           "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
         },
         {
           "internalType": "uint256",
@@ -1064,6 +1142,11 @@ export const fantasyLeagueABI = [
           "internalType": "bool",
           "name": "submitted",
           "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "captain",
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -1269,6 +1352,11 @@ export const fantasyLeagueABI = [
           "internalType": "string",
           "name": "teamName",
           "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "captainId",
+          "type": "uint256"
         }
       ],
       "name": "submitTeam",
@@ -1428,6 +1516,11 @@ export const fantasyLeagueABI = [
           "internalType": "bool",
           "name": "submitted",
           "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "captain",
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
