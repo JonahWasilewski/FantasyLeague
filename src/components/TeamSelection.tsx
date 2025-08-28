@@ -136,9 +136,6 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
         setMainPlayers([])
         setReservePlayer(null)
         setCaptain(null)
-        // keep localStorage for other addresses, but remove the cached team for this new address to avoid stale data
-        // (we'll restore if there is a saved team below)
-        // localStorage.removeItem(`team-${address}`)
       }
     }
 
@@ -215,7 +212,6 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
     return base
   }
 
-  // submitTeam now calls the updated contract signature that accepts captain id
   const submitTeam = async (
     contract: any,
     selectedIds: bigint[],
@@ -223,7 +219,6 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
     teamName: string,
     userAddress: string
   ) => {
-    // NOTE: updated contract signature: submitTeam(uint256[] selectedPlayers, string playerName, string teamName, uint256 captainId)
     const captainIdToSend = captain ? BigInt(captain.id) : BigInt(0)
     const tx = await contract.submitTeam(selectedIds.map(id => BigInt(id)), userName, teamName, captainIdToSend)
     await tx.wait()
