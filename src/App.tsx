@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import ConnectWallet from './components/WalletConnect'
+import LoginPage from './components/LoginPage'
 import TeamSelection from './components/TeamSelection'
 import MyTeam from './pages/MyTeam'
 import Leaderboard from './pages/Leaderboard'
@@ -117,7 +117,7 @@ function App() {
         )}
       </header>
 
-      {isConnected && hasSubmittedTeam && <div><Navbar /></div>}
+      {isConnected && hasSubmittedTeam && <div><Navbar isOracle={isOracle} /></div>}
 
       <main
         style={{
@@ -172,11 +172,10 @@ function App() {
                 {hasSubmittedTeam === true && (
                   <>
                     <strong>App Sections Explained:</strong><br /><br />
-                    <u>My Team</u>: View your current team selection and player details. This data is fetched directly from the smart contract using your wallet address.<br /><br />
-                    <u>Leaderboard</u>: Displays users ranked by total points. The points are computed off-chain and updated on-chain via an Oracle (with a special role).<br /><br />
-                    <u>Update Info</u>: Lets you update your team name and username, which are saved on-chain.<br /><br />
-                    <u>Past Seasons</u>: Shows historic data from completed seasons, stored permanently on the contract.<br /><br />
-                    <u>End Season & Distribute</u>: (Visible only to Oracles) This function ends the current season, distributes winnings, and starts a new season.<br />
+                    <u>My Team</u>: View the players you've chosen for your fantasy team. This page gives you a clear overview of your current lineup and lets you check their details whenever you like.<br /><br />
+                    <u>Leaderboard</u>: Keep track of how you're doing compared to everyone else in the league. You are ranked by your total points so you can see who's climbing the table and leading the way.<br /><br />
+                    <u>Update Info</u>: Change your display name or team name whenever you want. This is how other players will see you in the leaderboard and past seasons. All names must be unqiue.<br /><br />
+                    <u>Past Seasons</u>: Shows how previous competitions went. This section displays the history of older leagues, including top performers, their teams and the total prize money.<br /><br />
                   </>
                 )}
               </p>
@@ -207,7 +206,7 @@ function App() {
                   : hasSubmittedTeam
                     ? <Navigate to="/myteam" />
                     : <Navigate to="/select" />
-                : <ConnectWallet onConnect={() => setIsConnected(true)} />
+                : <LoginPage onConnect={() => setIsConnected(true)} />
             }
           />
           <Route
