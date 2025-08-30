@@ -6,6 +6,7 @@ import { ethers } from 'ethers'
 import PlayerModal from "../components/PlayerModal";
 import MetaMaskInfoModal from "../components/MetaMaskInfoModal";
 import ErrorModal from "../components/ErrorModal";
+import Navbar from './Navbar'
 
 // Player data structure - Returned by the contract
 interface PlayerFromContract {
@@ -101,7 +102,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
               price: player.price,
               rawStats: player.rawStats,
               parsedStats,
-              selectionPercentage: percentage // store as % (e.g. 12.34)
+              selectionPercentage: percentage // store as %
             };
           })
         );
@@ -237,11 +238,13 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
 
   const handleSubmitTeam = async () => {
     const totalSelected = mainPlayers.length + (reservePlayer ? 1 : 0)
-    if (totalSelected !== 12) return alert("Select 11 main + 1 reserve player.")
+    if (totalSelected !== 12) return alert("Please select 11 main + 1 reserve player.")
     if (!captain) return alert("Please select a captain before submitting.")
-    if ((Math.round(teamPrice / 10000) * 10000) > teamBudget) return alert("Budget exceeded.\nPrice: " + (Math.floor(teamPrice / 10000) * 10000) + "\nBudget: " + teamBudget)
-    if (!walletAddress) return alert("Connect wallet.")
-    if (!userName || !teamName) return alert("Enter username and team name.")
+    if ((Math.round(teamPrice / 10000) * 10000) > teamBudget) 
+      return alert("Budget exceeded.\nPrice: " + (Math.floor(teamPrice / 10000) * 10000) + 
+                   "\nBudget: " + teamBudget)
+    if (!walletAddress) return alert("You must first connect your wallet using MetaMask.")
+    if (!userName || !teamName) return alert("Please enter both your username and team name.")
 
     const selectedIds = [...mainPlayers.map(p => p.id), reservePlayer!.id]
 
@@ -299,6 +302,8 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
 
   // Render the UI
   return (
+    <>
+      <Navbar isOracle={false} showLinks={false} />
     <div style={{ padding: '2rem', width: '100%', maxWidth: '1200px', margin: '0 auto' }}>
       {loading && (
         <div style={{
@@ -323,6 +328,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
       )}
 
       <h2 style={{ marginBottom: '1rem' }}>Select Your Fantasy Team</h2>
+      <p style={{ marginBottom: '1rem' }}>11 Players | 1 Substitute | 1 Captain</p>
 
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
         <input
@@ -424,7 +430,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
           {captain ? <span style={{ marginLeft: '0.6rem' }}>• <strong>Captain:</strong> {captain.name}</span> : null}
         </div>
 
-        {/* Budget with slim bar */}
+        {/* Budget with progress bar */}
         <div style={{ flex: '1', maxWidth: '280px' }}>
           <strong>Remaining Budget: </strong>£{(teamPrice / 1_000_000).toFixed(2)}M / £100M
           <div style={{
@@ -507,6 +513,7 @@ const TeamSelection: React.FC<Props> = ({ onTeamSubmit }) => {
         />
       )}
     </div>
+  </>
   )
 }
 
